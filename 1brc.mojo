@@ -1,8 +1,8 @@
 from math import min, max, trunc, abs
 from algorithm.sort import sort
 
-#alias input_file = "../1brc/measurements.txt"
-alias input_file = "small_measurements.txt"
+alias input_file = "../1brc/measurements.txt"
+#alias input_file = "small_measurements.txt"
 alias chunk_size = 2048 * 2048
 
 
@@ -96,18 +96,19 @@ fn main() raises:
                 var name = StringRef((p + current_offset).value, name_loc)
                 var raw_value = StringRef((p + current_offset + name_loc + 1).value, len(ref) - len(name)) 
                 
+                # until this point it is around 1.09s on my machine which makes sense
+                # after raw_to_float, the time goes 2x or more
                 var value = raw_to_float(raw_value)
-                #print(name, value)
 
-                # if name in data:
-                #     var measurement = data[name]
-                #     measurement.min = min(measurement.min, value)
-                #     measurement.max = max(measurement.max, value)
-                #     measurement.sum += value
-                #     measurement.count += 1
-                #     data[name] = measurement
-                # else:
-                #     data[name] = Measurement(name, value, value, value, 1)
+                if name in data:
+                    var measurement = data[name]
+                    measurement.min = min(measurement.min, value)
+                    measurement.max = max(measurement.max, value)
+                    measurement.sum += value
+                    measurement.count += 1
+                    data[name] = measurement
+                else:
+                    data[name] = Measurement(name, value, value, value, 1)
 
                 # Advance our search offset past the delimiter
                 current_offset = loc + len("\n")
@@ -116,14 +117,16 @@ fn main() raises:
                 break
 
     # sort data by name
-    # var names = List[String]()
-    # for name in data.keys():
-    #     names.append(name[])
-    # quick_sort(names)
+    var names = List[String]()
+    for name in data.keys():
+        names.append(name[])
+    quick_sort(names)
 
-    # var res: String = "{"
-    # for name in names:
-    #     var measurement = data[name[]]
-    #     res += name[] + "=" + format_float(measurement.min) + "/" + format_float(measurement.sum / Float32(measurement.count)) + "/" + format_float(measurement.max) + ", "
-    # res += "}"
-    # print(res)
+    var res: String = "{"
+    for name in names:
+        var measurement = data[name[]]
+        res += name[] + "=" + format_float(measurement.min) + "/" + format_float(measurement.sum / Float32(measurement.count)) + "/" + format_float(measurement.max) + ", "
+    res += "}"
+    print(res)
+    # the whole script on my machine takes 36m51s
+    # data was mostly correct with a few precision issues (needs to be addressed)
