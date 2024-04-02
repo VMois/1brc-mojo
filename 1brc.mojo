@@ -7,8 +7,8 @@ alias chunk_size = 2048 * 2048
 
 
 @value
+@register_passable
 struct Measurement:
-    var name: String
     var min: Float32
     var max: Float32
     var sum: Float32
@@ -108,7 +108,7 @@ fn main() raises:
                     measurement.count += 1
                     data[name] = measurement
                 else:
-                    data[name] = Measurement(name, value, value, value, 1)
+                    data[name] = Measurement(value, value, value, 1)
 
                 # Advance our search offset past the delimiter
                 current_offset = loc + len("\n")
