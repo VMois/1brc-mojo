@@ -17,13 +17,30 @@ struct Measurement:
 
 @always_inline
 fn raw_to_float(raw_value: String) raises -> Float32:
-    var parts = raw_value.split(".")
-    var integer_part = atol(parts[0])
-    var decimal_part = atol(parts[1])
-    if parts[0][0] == "-":
-        return integer_part - decimal_part / 10
-    else:
-        return integer_part + decimal_part / 10
+    var p = raw_value._buffer.data
+
+    var offset: Int = 0
+    var sign = 1
+    if raw_value[0] == "-":
+        sign = -1
+        offset = 1
+
+    # Exclude the decimal point and dot
+    var part_1 = StringRef((p + offset).value, len(raw_value) - (3 + offset))
+
+    # Convert string to integer
+    var start = len(part_1) - 1
+    var integer_part = 0
+    var mul = 1
+    for i in range(start, -1, -1):
+        integer_part += int(part_1[i]) * mul
+        mul *= 10
+
+    # We always have a single decimal place, no need to guess
+    var part_2 = StringRef((p + len(raw_value) - 2).value, 1)
+    var decimal_part = int(part_2)
+
+    return sign * (integer_part + decimal_part / 10)
 
 
 @always_inline
@@ -67,18 +84,26 @@ fn main() raises:
     with open(input_file, "rb") as f:
         while True:
             var chunk = f.read(chunk_size)
-            var lines = chunk.split("\n")
+            chunk = prev_line + chunk
 
-            if len(lines) > 0:
-                lines[0] = prev_line + lines[0]
-            
-            if len(lines) > 1:
-                prev_line = lines[-1]
-            
-            #for i in range(0, len(lines) - 1):
-            #    var line_parts = lines[i].split(";")
-                # var name = line_parts[0]
-                # var value = raw_to_float(line_parts[1])
+            var p = chunk._buffer.data
+            prev_line = ""
+            var current_offset = 0
+
+            while True:
+                var loc = chunk.find("\n", current_offset)
+                if loc == -1:
+                    prev_line = chunk[current_offset:]
+                    break
+
+                var ref = StringRef((p + current_offset).value, loc - current_offset)
+                var name_loc = ref.find(";")
+                var name = StringRef((p + current_offset).value, name_loc)
+                var raw_value = StringRef((p + current_offset + name_loc + 1).value, len(ref) - len(name)) 
+                
+                var value = raw_to_float(raw_value)
+                #print(name, value)
+
                 # if name in data:
                 #     var measurement = data[name]
                 #     measurement.min = min(measurement.min, value)
@@ -88,10 +113,14 @@ fn main() raises:
                 #     data[name] = measurement
                 # else:
                 #     data[name] = Measurement(name, value, value, value, 1)
+
+                # Advance our search offset past the delimiter
+                current_offset = loc + len("\n")
+
             if len(chunk) < chunk_size:
                 break
 
-    # # sort data by name
+    # sort data by name
     # var names = List[String]()
     # for name in data.keys():
     #     names.append(name[])
@@ -103,4 +132,3 @@ fn main() raises:
     #     res += name[] + "=" + format_float(measurement.min) + "/" + format_float(measurement.sum / Float32(measurement.count)) + "/" + format_float(measurement.max) + ", "
     # res += "}"
     # print(res)
-    print("done")
