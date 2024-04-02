@@ -1,8 +1,8 @@
 from math import min, max, trunc, abs
 from algorithm.sort import sort
 
-alias input_file = "../1brc/measurements.txt"
-#alias input_file = "small_measurements.txt"
+#alias input_file = "../1brc/measurements.txt"
+alias input_file = "small_measurements.txt"
 alias chunk_size = 2048 * 2048
 
 
@@ -27,14 +27,9 @@ fn raw_to_float(raw_value: String) raises -> Float32:
 
     # Exclude the decimal point and dot
     var part_1 = StringRef((p + offset).value, len(raw_value) - (3 + offset))
-
-    # Convert string to integer
-    var start = len(part_1) - 1
-    var integer_part = 0
-    var mul = 1
-    for i in range(start, -1, -1):
-        integer_part += int(part_1[i]) * mul
-        mul *= 10
+    var integer_part = int(part_1[0])
+    if len(part_1) == 2:
+        integer_part = integer_part * 10 + int(part_1[1])
 
     # We always have a single decimal place, no need to guess
     var part_2 = StringRef((p + len(raw_value) - 2).value, 1)
