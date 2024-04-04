@@ -1,5 +1,6 @@
 from math import min, max, trunc, abs
 from algorithm.sort import sort
+from string_dict import Dict as CompactDict
 
 alias input_file = "../1brc/measurements.txt"
 #alias input_file = "small_measurements.txt"
@@ -7,8 +8,8 @@ alias chunk_size = 2048 * 2048
 
 
 @value
-@register_passable
 struct Measurement:
+    var name: String
     var min: Float32
     var max: Float32
     var sum: Float32
@@ -75,7 +76,7 @@ fn quick_sort(inout vector: List[String]):
 
 fn main() raises:
     var prev_line: String = ""
-    var data = Dict[String, Measurement]()
+    var data = CompactDict[Measurement]()
     with open(input_file, "rb") as f:
         while True:
             var chunk = f.read(chunk_size)
@@ -101,14 +102,14 @@ fn main() raises:
                 var value = raw_to_float(raw_value)
 
                 if name in data:
-                    var measurement = data[name]
+                    var measurement = data.get(name, default=Measurement(name, 0, 0, 0, 0))
                     measurement.min = min(measurement.min, value)
                     measurement.max = max(measurement.max, value)
                     measurement.sum += value
                     measurement.count += 1
-                    data[name] = measurement
+                    data.put(name, measurement)
                 else:
-                    data[name] = Measurement(value, value, value, 1)
+                    data.put(name, Measurement(name, value, value, value, 1))
 
                 # Advance our search offset past the delimiter
                 current_offset = loc + len("\n")
@@ -118,15 +119,13 @@ fn main() raises:
 
     # sort data by name
     var names = List[String]()
-    for name in data.keys():
-        names.append(name[])
+    for m in data.values:
+        names.append(m[].name)
     quick_sort(names)
 
     var res: String = "{"
     for name in names:
-        var measurement = data[name[]]
-        res += name[] + "=" + format_float(measurement.min) + "/" + format_float(measurement.sum / Float32(measurement.count)) + "/" + format_float(measurement.max) + ", "
+        var measurement = data.get(name[], default=Measurement(name[], 0, 0, 0, 0))
+        res += measurement.name + "=" + format_float(measurement.min) + "/" + format_float(Float32(measurement.sum) / Float32(measurement.count)) + "/" + format_float(measurement.max) + ", "
     res += "}"
     print(res)
-    # the whole script on my machine takes 36m51s
-    # data was mostly correct with a few precision issues (needs to be addressed)
