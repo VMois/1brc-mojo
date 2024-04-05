@@ -84,6 +84,7 @@ fn main() raises:
     var prev_line: String = ""
     var data = CompactDict[Measurement]()
     with open(input_file, "rb") as f:
+        # process chunk
         while True:
             var chunk = f.read(chunk_size)
             chunk = prev_line + chunk
@@ -92,6 +93,7 @@ fn main() raises:
             prev_line = ""
             var current_offset = 0
 
+            # process line
             while True:
                 var loc = chunk.find("\n", current_offset)
                 if loc == -1:
@@ -103,19 +105,14 @@ fn main() raises:
                 var name = StringRef((p + current_offset).value, name_loc)
                 var raw_value = StringRef((p + current_offset + name_loc + 1).value, len(ref) - len(name)) 
                 
-                # until this point it is around 1.09s on my machine which makes sense
-                # after raw_to_float, the time goes 2x or more
                 var value = raw_to_float(raw_value)
 
-                if name in data:
-                    var measurement = data.get(name, default=Measurement(name, 0, 0, 0, 0))
-                    measurement.min = min(measurement.min, value)
-                    measurement.max = max(measurement.max, value)
-                    measurement.sum += value
-                    measurement.count += 1
-                    data.put(name, measurement)
-                else:
-                    data.put(name, Measurement(name, value, value, value, 1))
+                var measurement = data.get(name, default=Measurement(name, value, value, 0, 0))
+                measurement.min = min(measurement.min, value)
+                measurement.max = max(measurement.max, value)
+                measurement.sum += value
+                measurement.count += 1
+                data.put(name, measurement)
 
                 # Advance our search offset past the delimiter
                 current_offset = loc + len("\n")
