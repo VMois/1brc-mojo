@@ -1,4 +1,4 @@
-from math import min, max, trunc, abs
+from math import min, max, trunc, abs, round
 from algorithm.sort import sort
 from string_dict import Dict as CompactDict
 
@@ -10,14 +10,14 @@ alias chunk_size = 2048 * 2048
 @value
 struct Measurement:
     var name: String
-    var min: Float32
-    var max: Float32
-    var sum: Float32
+    var min: Int
+    var max: Int
+    var sum: Int
     var count: Int
 
 
 @always_inline
-fn raw_to_float(raw_value: String) raises -> Float32:
+fn raw_to_float(raw_value: String) raises -> Int:
     var p = raw_value._buffer.data
 
     var offset: Int = 0
@@ -35,13 +35,19 @@ fn raw_to_float(raw_value: String) raises -> Float32:
     # We always have a single decimal place, no need to guess
     var part_2 = StringRef((p + len(raw_value) - 2).value, 1)
     var decimal_part = int(part_2)
+    return sign * (integer_part * 10 + decimal_part)
 
-    return sign * (integer_part + decimal_part / 10)
+
+fn format_float(value: Float32) -> String:
+    return String(trunc(value).to_int()) + "." + (abs(value * 10) % 10).to_int()
 
 
 @always_inline
-fn format_float(value: Float32) -> String:
-    return String(trunc(value).to_int()) + "." + (abs(value * 10) % 10).to_int()
+fn format_int(value: Int) -> String:
+    var sign = ""
+    if value < 0:
+        sign = "-"
+    return sign + String(abs(value) // 10) + "." + abs(value) % 10
 
 
 @always_inline
@@ -126,6 +132,6 @@ fn main() raises:
     var res: String = "{"
     for name in names:
         var measurement = data.get(name[], default=Measurement(name[], 0, 0, 0, 0))
-        res += measurement.name + "=" + format_float(measurement.min) + "/" + format_float(Float32(measurement.sum) / Float32(measurement.count)) + "/" + format_float(measurement.max) + ", "
+        res += measurement.name + "=" + format_int(measurement.min) + "/" + format_float((measurement.sum / measurement.count) / 10) + "/" + format_int(measurement.max) + ", "
     res += "}"
     print(res)
