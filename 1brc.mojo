@@ -82,7 +82,7 @@ fn quick_sort(inout vector: List[String]):
 
 fn main() raises:
     var prev_line: String = ""
-    var data = CompactDict[Measurement]()
+    var data = CompactDict[Measurement](capacity=200)
     with open(input_file, "rb") as f:
         # process chunk
         while True:
