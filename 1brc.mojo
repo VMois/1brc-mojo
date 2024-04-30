@@ -2,6 +2,7 @@ from math.math import abs, min, max, trunc, round
 from algorithm.sort import sort
 from string_dict import Dict as CompactDict
 from algorithm import parallelize
+from algorithm.functional import num_physical_cores
 from os import SEEK_CUR
 import os.fstat
 import sys
@@ -10,10 +11,8 @@ alias input_file = "measurements.txt"
 # alias input_file = "small_measurements.txt"
 
 alias cores = 64
-alias DEFAULT_SIZE = 64 * 1024
-alias chunk_size = 8 * DEFAULT_SIZE
-
-
+alias DEFAULT_SIZE = 64 * 1024 
+alias chunk_size = DEFAULT_SIZE
 
 @value
 struct Measurement(Stringable):
@@ -114,14 +113,14 @@ fn process_line(line: StringRef, inout aggregator: CompactDict[Measurement]):
 
 
 @always_inline
-fn worker(chunk: StringRef, inout aggregator: CompactDict[Measurement]):
-
+fn worker(chunk: StringRef):
+    var aggregator = CompactDict[Measurement](200)
     var p = chunk.data
     var head = 0
     var max = int(chunk.data.address + chunk.length)
-
     while True:
         var line_loc = chunk.find("\n", head)
+
         if line_loc == -1:
             break
 
@@ -135,17 +134,19 @@ fn worker(chunk: StringRef, inout aggregator: CompactDict[Measurement]):
 @always_inline
 fn parallelizer[workers: Int = 8](chunk: StringRef) -> Int:
     var indcies = tagger[workers](chunk)
-    var aggr_list = List[CompactDict[Measurement]]()
-    for i in range(workers):
-        aggr_list.append(CompactDict[Measurement](2000))
+
+    # var aggr_list = List[CompactDict[Measurement]]()
+    # for i in range(workers + 5):
+    #     aggr_list.append(CompactDict[Measurement](capacity = 2000))
+    # print(len(aggr_list))
 
     @parameter
     fn inner(index: Int):
         var str_ref = StringRef(chunk.data + indcies[index], indcies[index+1] - indcies[index])
-        worker(str_ref, aggr_list[index])
+        worker(str_ref)
     parallelize[inner](workers)
     
-    # TODO: Add dict addition
+    # TODO: Find a way to combine the aggregator
 
     return indcies[len(indcies) -1]
 
@@ -156,7 +157,7 @@ fn main() raises:
     var buf = DTypePointer[DType.int8]().alloc(chunk_size)
 
     var stat = fstat.stat(input_file)
-    var size =  stat.st_size
+    var size =  stat.st_size 
 
     while True:
         var chunk = f.read(buf, chunk_size)
