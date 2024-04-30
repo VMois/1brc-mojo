@@ -4,20 +4,20 @@ from string_dict import Dict as CompactDict
 
 alias input_file = "measurements.txt"
 #alias input_file = "small_measurements.txt"
-alias chunk_size = 2048 * 2048
+alias chunk_size = 64 * 1024
 
 
 @value
 struct Measurement:
     var name: String
-    var min: Int8
-    var max: Int8
+    var min: Int16
+    var max: Int16
     var sum: Int
     var count: Int
 
 
 @always_inline
-fn raw_to_float(raw_value: StringRef) raises -> Int8:
+fn raw_to_float(raw_value: StringRef) raises -> Int16:
     var p = raw_value.data
 
     var x: SIMD[DType.int8, 4]
@@ -28,10 +28,10 @@ fn raw_to_float(raw_value: StringRef) raises -> Int8:
 
     var mask = x >= 0 and x <= 9
 
-    var val: Int8 = 0
-    for i in range(4):
+    var val: Int16 = 0
+    for i in range(0,4, 1):
         if mask[i]:
-            val = val * 10 + x[i]
+            val = val * 10 + int(x[i])
     if raw_value[0] == "-":
         val = val * -1
     return val
@@ -104,12 +104,12 @@ fn main() raises:
                 var raw_value = StringRef(p + current_offset + name_loc + 1, len(ref) - len(name)) 
                 var value = raw_to_float(raw_value)
 
-                var measurement = data.get(name, default=Measurement(name, value, value, 0, 0))
-                measurement.min = min(measurement.min, value)
-                measurement.max = max(measurement.max, value)
-                measurement.sum += int(value)
-                measurement.count += 1
-                data.put(name, measurement)
+                # var measurement = data.get(name, default=Measurement(name, value, value, 0, 0))
+                # measurement.min = min(measurement.min, value)
+                # measurement.max = max(measurement.max, value)
+                # measurement.sum += int(value)
+                # measurement.count += 1
+                # data.put(name, measurement)
 
                 # Advance our search offset past the delimiter
                 current_offset = loc + 1
@@ -119,8 +119,8 @@ fn main() raises:
 
     # sort data by name
     var names = List[String]()
-    # for m in data.values:
-    #     names.append(m[].name)
+    for m in data.values:
+        names.append(m[].name)
     # # quick_sort(names)
 
     var res: String = "{"
