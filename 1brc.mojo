@@ -2,17 +2,15 @@ from math.math import abs, min, max, trunc, round
 from algorithm.sort import sort
 from string_dict import Dict as CompactDict
 from algorithm import parallelize
-from algorithm.functional import num_physical_cores
+from algorithm.functional import sync_parallelize
 from os import SEEK_CUR
 import os.fstat
 import sys
 
-alias input_file = "measurements.txt"
+alias input_file = "measurements_100k.txt"
 # alias input_file = "small_measurements.txt"
 
-alias cores = 64
-alias DEFAULT_SIZE = 64 * 1024 
-alias chunk_size = DEFAULT_SIZE
+alias cores = 8
 
 @value
 struct Measurement(Stringable):
@@ -21,6 +19,20 @@ struct Measurement(Stringable):
     var max: Int16
     var sum: Int
     var count: Int
+
+    fn __add__(inout self, other: Self) raises -> Self:
+
+        if self.name != other.name:
+            raise Error("Measurements are not the same")
+
+        var new = Measurement(
+            name = self.name,
+            min = min(self.min, other.min),
+            max = max(self.max, other.max),
+            sum = self.sum + other.sum,
+            count = self.count + other.count
+        )
+        return new
 
     fn __str__(self) -> String:
         return (
@@ -79,7 +91,7 @@ fn swap(inout vector: List[String], a: Int, b: Int):
 
 @always_inline
 fn tagger[
-    num_workers: Int = 8
+    num_workers: Int
 ](chunk: StringRef, substr: StringRef = "\n") -> List[Int]:
 
     var indicies = List[Int]()
@@ -108,13 +120,11 @@ fn process_line(line: StringRef, inout aggregator: CompactDict[Measurement]):
     measurement.max = max(measurement.max, value)
     measurement.sum += int(value)
     measurement.count += 1
-
     aggregator.put(name, measurement)
 
 
 @always_inline
-fn worker(chunk: StringRef):
-    var aggregator = CompactDict[Measurement](200)
+fn worker(chunk: StringRef, inout aggregator: CompactDict[Measurement]):
     var p = chunk.data
     var head = 0
     var max = int(chunk.data.address + chunk.length)
@@ -132,39 +142,61 @@ fn worker(chunk: StringRef):
         head = line_loc + 1
 
 @always_inline
-fn parallelizer[workers: Int = 8](chunk: StringRef) -> Int:
+fn parallelizer[workers: Int = 8](chunk: StringRef) -> List[CompactDict[Measurement]]:
+# fn parallelizer[workers: Int](chunk: StringRef) -> Int:
+
+
     var indcies = tagger[workers](chunk)
 
-    # var aggr_list = List[CompactDict[Measurement]]()
-    # for i in range(workers + 5):
-    #     aggr_list.append(CompactDict[Measurement](capacity = 2000))
-    # print(len(aggr_list))
+    var aggr_list = List[CompactDict[Measurement]]()
+    for i in range(workers):
+        aggr_list.append(CompactDict[Measurement]())
 
     @parameter
     fn inner(index: Int):
         var str_ref = StringRef(chunk.data + indcies[index], indcies[index+1] - indcies[index])
-        worker(str_ref)
+        worker(str_ref, aggr_list[index])
     parallelize[inner](workers)
     
     # TODO: Find a way to combine the aggregator
-
-    return indcies[len(indcies) -1]
+    _ = aggr_list
+    return aggr_list
+    #return 0
 
 
 fn main() raises:
     var consumed: UInt64 = 0
     var f = open(input_file, "r")
-    var buf = DTypePointer[DType.int8]().alloc(chunk_size)
 
     var stat = fstat.stat(input_file)
     var size =  stat.st_size 
 
-    while True:
-        var chunk = f.read(buf, chunk_size)
-        consumed += chunk_size
-        var ref = StringRef(buf, chunk_size)
-        if consumed >=size:
-            break
-        var regress = parallelizer[workers = cores](ref)
-        consumed = f.seek(chunk_size -regress, whence = 1)
+    var buf = DTypePointer[DType.int8]().alloc(size)
+    var chunk = f.read(buf, size)
+    var ref = StringRef(buf, size)
+    var aggregators = parallelizer[workers = cores](ref)
+
+    var master_dict = CompactDict[Measurement](capacity = 2000)
+    
+    for i in range(len(aggregators)):
+        var dic = aggregators[i]
+        for j in range(dic.count):
+            var meas = dic.values[i]
+            var val = master_dict.get(meas.name, default = Measurement(meas.name, 0,0,0,0))
+            meas = meas + val
+            master_dict.put(meas.name, meas)
+
+
+
+
+
+
+    # while True:
+    #     var chunk = f.read(buf, size)
+    #     consumed += chunk_size
+    #     var ref = StringRef(buf, chunk_size)
+    #     if consumed >=size:
+    #         break
+    #     var regress = parallelizer[workers = cores](ref)
+    #     consumed = f.seek(chunk_size -regress, whence = 1)
     
