@@ -7,7 +7,7 @@ from os import SEEK_CUR
 import os.fstat
 import sys
 
-alias input_file = "measurements_100k.txt"
+alias input_file = "measurements_100M.txt"
 # alias input_file = "small_measurements.txt"
 
 alias cores = 8
@@ -181,12 +181,23 @@ fn main() raises:
     for i in range(len(aggregators)):
         var dic = aggregators[i]
         for j in range(dic.count):
-            var meas = dic.values[i]
+            var meas = dic.values[j]
             var val = master_dict.get(meas.name, default = Measurement(meas.name, 0,0,0,0))
             meas = meas + val
             master_dict.put(meas.name, meas)
 
 
+    var names = List[String]()
+    for m in master_dict.values:
+        names.append(m[].name)
+    # quick_sort(names)
+
+    var res: String = "{"
+    for name in names:
+        var measurement = master_dict.get(name[], default=Measurement(name[], 0, 0, 0, 0))
+        res += measurement.name + "=" + format_int(int(measurement.min)) + "/" + format_float((measurement.sum / measurement.count) / 10) + "/" + format_int(int(measurement.max)) + ", "
+    res += "}"
+    print(res)
 
 
 
