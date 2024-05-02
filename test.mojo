@@ -1,4 +1,4 @@
-from math.math import abs, min, max, trunc, round, align_up
+from math.math import abs, min, max, trunc, round
 from algorithm.sort import sort
 from string_dict import Dict as CompactDict
 from algorithm import parallelize
@@ -7,10 +7,10 @@ from os import SEEK_CUR
 import os.fstat
 import sys
 
-alias input_file = "measurements_1B.txt"
+alias input_file = "measurements_100M.txt"
 # alias input_file = "small_measurements.txt"
 
-alias cores = 32
+alias cores = 8
 
 @value
 struct Measurement(Stringable):
@@ -90,20 +90,22 @@ fn swap(inout vector: List[String], a: Int, b: Int):
 
 
 @always_inline
-fn tagger[
-    num_workers: Int
-](chunk: StringRef, substr: StringRef = "\n") -> List[Int]:
-
+fn tagger[num_workers: Int](handle: FileHandle, substr: StringRef = "\n") raises -> List[Int]:
+    
+    var stat = fstat.stat(input_file)
+    var size =  stat.st_size 
     var indicies = List[Int]()
     indicies.append(0)
-    var last_index = chunk.rfind(substr)
-    var leap = int(last_index / num_workers)
-    var offset = 0
-    for i in range(num_workers):
-        indicies.append(chunk.find(substr, offset + leap))
-        offset += leap
-    return indicies
 
+    var leap = int(size / num_workers)
+    var offset = 0
+    for i in range(num_workers - 1):
+        var offset = handle.seek(leap - 100, 1)
+        var s = handle.read(100)
+        indicies.append(int(offset + s.find(substr)))
+
+    indicies.append(size)
+    return indicies
 
 @always_inline
 fn process_line(line: StringRef, inout aggregator: CompactDict[Measurement]):
@@ -124,87 +126,65 @@ fn process_line(line: StringRef, inout aggregator: CompactDict[Measurement]):
 
 
 @always_inline
-fn worker(chunk: StringRef, inout aggregator: CompactDict[Measurement]):
-    var p = chunk.data
-    var head = 0
-    var max = int(chunk.data.address + chunk.length)
-    while True:
-        var line_loc = chunk.find("\n", head)
+fn worker(input_file: String, offset: Int, amt: Int,  inout aggregator: CompactDict[Measurement]):
+    try:
+        var handle = open(input_file, "r")  
+        var chunk = handle.read(amt)
+        var max = len(chunk)
+        var head = 0
+        var p = chunk._buffer.data
 
-        if line_loc == -1:
-            break
+        while True:
+            var line_loc = chunk.find("\n", head)
 
-        if line_loc > max:
-            break
+            if line_loc == -1:
+                break
 
-        var line = StringRef(p + head, line_loc - head)
-        process_line(line, aggregator)
-        head = line_loc + 1
+            if line_loc > max:
+                break
+
+            var line = StringRef(p + head, line_loc - head)
+            process_line(line, aggregator)
+            head = line_loc + 1
+        _ = chunk
+    except Error:
+        print(Error)
+        return
 
 @always_inline
-fn parallelizer[workers: Int](chunk: StringRef, inout aggr_list: List[CompactDict[Measurement]]) -> Int:
-    var indcies = tagger[workers](chunk)
+fn parallelizer[workers: Int](input_path: String) raises -> List[CompactDict[Measurement]]:
+
+    var handle = open(input_path, "r")
+    var indcies = tagger[workers](handle)
+    var aggr_list = List[CompactDict[Measurement]]()
+    for i in range(workers):
+        aggr_list.append(CompactDict[Measurement]())
     @parameter
     fn inner(index: Int):
-        var str_ref = StringRef(chunk.data + indcies[index], indcies[index+1] - indcies[index])
-        worker(str_ref, aggr_list[index])
+        worker(input_path, indcies[index], indcies[index+1] - indcies[index], aggr_list[index])
     parallelize[inner](workers)
-    
-    return indcies[-1]
-    #return 0
-
-# Max read size in Mojo is 2GB
-alias MAX_CHUNK = 2_000_000_000
+    _ = aggr_list
+    return aggr_list
 
 fn main() raises:
-    var consumed: UInt64 = 0
-    var f = open(input_file, "r")
-
-    var stat = fstat.stat(input_file)
-    var size =  stat.st_size 
-
-    var loops = size // MAX_CHUNK
-
-    var aggr_list = List[CompactDict[Measurement]]()
-    for i in range(cores):
-        aggr_list.append(CompactDict[Measurement](capacity = 2000))
-
-
-    var buf = DTypePointer[DType.int8]().alloc(MAX_CHUNK)
-    var pos: UInt64 = 0
-    for i in range(loops):
-        var chunk = f.read(buf, size = MAX_CHUNK)
-        var ref = StringRef(buf, MAX_CHUNK)
-        var aggregators = parallelizer[workers = cores](ref, aggr_list)
-        pos = f.seek(aggregators - MAX_CHUNK, 1)
-    buf.free()
-
-    # Handling last chunk
-    var rem = int(size - pos)
-    buf = DTypePointer[DType.int8]().alloc(int(rem))
-    var chunk = f.read(buf, size = rem)
-    var ref = StringRef(buf, rem)
-    var aggregators = parallelizer[workers = cores](ref, aggr_list)
-
+    var aggregators = parallelizer[cores](input_file)
     var master_dict = CompactDict[Measurement](capacity = 2000)
-    for i in range(len(aggr_list)):
-        var dic = aggr_list[i]
-        for j in range(dic.count):
-            var meas = dic.values[j]
-            var val = master_dict.get(meas.name, default = Measurement(meas.name, 0,0,0,0))
-            meas = meas + val
-            master_dict.put(meas.name, meas)
+    
+    # for i in range(len(aggregators)):
+    #     var dic = aggregators[i]
+    #     for j in range(dic.count):
+    #         var meas = dic.values[j]
+    #         var val = master_dict.get(meas.name, default = Measurement(meas.name, 0,0,0,0))
+    #         meas = meas + val
+    #         master_dict.put(meas.name, meas)
+    # var names = List[String]()
+    # for m in master_dict.values:
+    #     names.append(m[].name)
 
-    var names = List[String]()
-    for m in master_dict.values:
-        names.append(m[].name)
-
-    var res: String = "{"
-    for name in names:
-        var measurement = master_dict.get(name[], default=Measurement(name[], 0, 0, 0, 0))
-        res += measurement.name + "=" + format_int(int(measurement.min)) + "/" + format_float((measurement.sum / measurement.count) / 10) + "/" + format_int(int(measurement.max)) + ", "
-    res += "}"
-    print(res)
-
-
+    # var res: String = "{"
+    # for name in names:
+    #     var measurement = master_dict.get(name[], default=Measurement(name[], 0, 0, 0, 0))
+    #     res += measurement.name + "=" + format_int(int(measurement.min)) + "/" + format_float((measurement.sum / measurement.count) / 10) + "/" + format_int(int(measurement.max)) + ", "
+    # res += "}"
+    # print(res)
 
